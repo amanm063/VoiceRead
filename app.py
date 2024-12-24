@@ -3,15 +3,23 @@ import PyPDF2
 import tempfile
 import os
 from gtts import gTTS
-from pygame import mixer
 import threading
 from queue import Queue
 import io
 
-# Initialize the mixer for audio playback only if not in Streamlit Cloud
-if os.environ.get('STREAMLIT_SERVER') is None:
+# Import pygame and initialize mixer if not in Streamlit Cloud
+try:
     import pygame
-    mixer.init()
+    mixer_initialized = False
+except ImportError:
+    pygame = None  # Handle the case where pygame is not installed
+
+def initialize_mixer():
+    """Initialize the pygame mixer."""
+    global mixer_initialized
+    if pygame and not mixer_initialized:
+        mixer.init()
+        mixer_initialized = True
 
 def extract_text_from_pdf(pdf_path, start_page=1, end_page=None):
     """Extract text from a PDF file."""
@@ -34,11 +42,16 @@ def text_to_speech_worker(sentence_queue, speed):
         mp3_fp = io.BytesIO()
         tts.write_to_fp(mp3_fp)
         mp3_fp.seek(0)
-        
-        sound = mixer.Sound(mp3_fp)
-        sound.play()
-        while mixer.get_busy():
-            continue
+
+        # Use HTML5 audio tag for playback if running in the cloud
+        if os.environ.get('STREAMLIT_SERVER') is not None:
+            st.audio(mp3_fp, format='audio/mp3')
+        else:
+            initialize_mixer()  # Ensure mixer is initialized before playing sound
+            sound = pygame.mixer.Sound(mp3_fp)
+            sound.play()
+            while pygame.mixer.get_busy():
+                continue
         
         sentence_queue.task_done()
 
