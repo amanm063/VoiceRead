@@ -8,8 +8,10 @@ import threading
 from queue import Queue
 import io
 
-# Initialize the mixer for audio playback
-mixer.init()
+# Initialize the mixer for audio playback only if not in Streamlit Cloud
+if os.environ.get('STREAMLIT_SERVER') is None:
+    import pygame
+    mixer.init()
 
 def extract_text_from_pdf(pdf_path, start_page=1, end_page=None):
     """Extract text from a PDF file."""
