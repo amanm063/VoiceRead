@@ -2,10 +2,9 @@ import streamlit as st
 import PyPDF2
 import tempfile
 import os
-from gtts import gTTS
+import pyttsx3
 import base64
 import io
-import time
 
 # Set up the app configuration
 st.set_page_config(
@@ -54,13 +53,6 @@ body {
 </style>
 """, unsafe_allow_html=True)
 
-def calculate_read_time(line, speed):
-    """Calculate reading time for a line based on words and speed."""
-    words = len(line.split())
-    base_time = words * 0.6  # Rough estimate of time to read one word
-    adjusted_time = base_time / speed  # Adjust time according to speed
-    return max(adjusted_time, 1.0)
-
 def extract_text_from_pdf(pdf_path, start_page=1, end_page=None):
     """Extract text from a PDF file."""
     with open(pdf_path, 'rb') as file:
@@ -71,28 +63,19 @@ def extract_text_from_pdf(pdf_path, start_page=1, end_page=None):
             for i in range(start_page - 1, end_page)
         )
 
-def generate_audio_with_retry(text, retries=3):
-    """Generate audio with retry logic for gTTS."""
-    attempt = 0
-    backoff = 1  # Start with a 1 second backoff
-    while attempt < retries:
-        try:
-            tts = gTTS(text=text, lang='en')
-            mp3_fp = io.BytesIO()
-            tts.write_to_fp(mp3_fp)
-            mp3_fp.seek(0)
-            return mp3_fp.getvalue()
-        except Exception as e:
-            if '429' in str(e):
-                st.warning(f"Error 429: Too many requests. Retrying in {backoff} seconds...")
-                time.sleep(backoff)
-                backoff *= 2  # Exponential backoff
-                attempt += 1
-            else:
-                raise e
-    st.error("Failed to generate speech after multiple attempts.")
-    return None
-
+def generate_audio_with_pyttsx3(text):
+    """Generate audio using pyttsx3."""
+    engine = pyttsx3.init()
+    audio_fp = io.BytesIO()
+    engine.save_to_file(text, 'temp_audio.mp3')
+    engine.runAndWait()
+    
+    # Read the saved file into memory and clean up
+    with open('temp_audio.mp3', 'rb') as file:
+        audio_fp.write(file.read())
+    os.remove('temp_audio.mp3')
+    audio_fp.seek(0)
+    return audio_fp.getvalue()
 
 # Initialize session state
 if 'reading' not in st.session_state:
@@ -132,8 +115,8 @@ if uploaded_file:
         # Generate and play audio when button is clicked
         if st.button("▶️ Start Reading"):
             with st.spinner("Generating audio..."):
-                # Generate audio in memory with retry logic
-                audio_data = generate_audio_with_retry(text)
+                # Generate audio using pyttsx3
+                audio_data = generate_audio_with_pyttsx3(text)
                 
                 if audio_data:
                     # Convert audio to base64 and display the player
